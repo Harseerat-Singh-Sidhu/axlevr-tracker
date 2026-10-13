@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>AxleVR Lead Tracker</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--muted:#667085;--line:#e4e7ec;--accent:#2f6fed;--hot:#d92d20;--warm:#dc6803;--cold:#667085;--won:#079455}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--muted:#98a2b3;--line:#2a2f3a;--accent:#6b9bff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--card)}
+h1{font-size:18px;margin:0}
+.wrap{padding:16px;max-width:1400px;margin:0 auto}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;user-select:none}
+.stat b{font-size:16px;margin-right:4px}
+.stat.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+input,select,textarea,button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+button{cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:1350px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;white-space:nowrap;position:sticky;top:0;background:var(--card)}
+tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+td select{padding:3px 4px;font-size:13px}
+.sub{color:var(--muted);font-size:12px}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid currentColor}
+.Hot{color:var(--hot)}.Warm{color:var(--warm)}.Cold{color:var(--cold)}
+.due{color:var(--hot);font-weight:600}
+a{color:var(--accent)}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);width:min(640px,calc(100vw - 32px));padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.grid .full{grid-column:1/-1}
+@media (max-width:600px){.grid{grid-template-columns:1fr}}
+td.contact{font-size:13px;min-width:220px;max-width:260px;overflow-wrap:anywhere}
+td.contact div+div{margin-top:2px}
+#msgDlg{width:min(760px,calc(100vw - 32px))}
+.step{border:1px solid var(--line);border-radius:8px;padding:10px;margin:10px 0}
+.step h4{margin:0 0 6px;font-size:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.step textarea{width:100%;font-size:13px;line-height:1.45}
+.step .row{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.step.sent{opacity:.65}
+button.msgs{border-color:var(--accent);color:var(--accent)}
+.empty{padding:32px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>AxleVR Lead Tracker</h1>
+  <div class="bar" style="margin:0">
+    <button class="primary" id="addBtn">+ Add lead</button>
+    <button id="exportBtn">Export CSV</button>
+    <button id="backupBtn">Backup JSON</button>
+    <label><button type="button" onclick="this.nextElementSibling.click()">Import leads</button><input type="file" id="importFile" accept=".csv,.json,.js" hidden></label>
+  </div>
+</header>
+<div class="wrap">
+  <div class="stats" id="stats"></div>
+  <div class="bar">
+    <input id="q" placeholder="Search name, company, title, notes…" style="flex:1;min-width:200px">
+    <select id="fSeg"><option value="">All segments</option></select>
+    <select id="fPri"><option value="">All priorities</option><option>Hot</option><option>Warm</option><option>Cold</option></select>
+    <label class="sub" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fDue"> Follow-up due</label>
+    <label class="sub" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fEmail"> Has email</label>
+  </div>
+  <div class="tablewrap"><table style="min-width:1150px">
+    <thead><tr>
+      <th data-k="name">Name / Title</th><th data-k="company">Company</th><th data-k="segment">Segment</th>
+      <th data-k="location">Plant / location</th><th>Contact</th><th data-k="priority">Priority</th><th data-k="stage">Stage</th>
+      <th data-k="next">Next follow-up</th><th>Notes</th><th></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <p class="sub">Data is saved in this browser only. Use “Backup JSON” regularly and “Import” to move it to another computer.</p>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="form">
+  <h3 style="margin-top:0" id="dlgTitle">Lead</h3>
+  <div class="grid">
+    <label>Name<input name="name" required></label>
+    <label>Title<input name="title"></label>
+    <label>Company<input name="company" required></label>
+    <label>Segment<select name="segment"></select></label>
+    <label>Persona<select name="persona"></select></label>
+    <label>Location (city, state)<input name="location"></label>
+    <label>Company size<input name="size" placeholder="e.g. 1,001-5,000"></label>
+    <label>Priority<select name="priority"><option>Hot</option><option selected>Warm</option><option>Cold</option></select></label>
+    <label>Stage<select name="stage"></select></label>
+    <label>Next follow-up<input type="date" name="next"></label>
+    <label class="full">LinkedIn / Sales Nav URL<input name="url" type="url"></label>
+    <label>Email<input name="email" type="email"></label>
+    <label>Phone<input name="phone"></label>
+    <label>Company phone<input name="companyPhone"></label>
+    <label>Company email<input name="companyEmail"></label>
+    <label class="full">Company website<input name="website"></label>
+    <label class="full">Company address<input name="address"></label>
+    <label class="full">Notes (why they fit, pain, last touch)<textarea name="notes" rows="4"></textarea></label>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+    <button value="cancel" formnovalidate>Cancel</button>
+    <button class="primary" value="save">Save</button>
+  </div>
+</form></dialog>
+
+<dialog id="msgDlg">
+  <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+    <div><h3 style="margin:0" id="msgTitle"></h3><div class="sub" id="msgSub"></div></div>
+    <button onclick="msgDlg.close()">Close</button>
+  </div>
+  <p class="sub">Replace [Your name] and [phone] before sending. Edits are saved for this lead. “Mark sent” updates the stage, notes and next follow-up.</p>
+  <div id="msgSteps"></div>
+</dialog>
+
+<script>
+const STAGES=["New","Connect sent","Connected","Messaged","Replied","Discovery call","Demo","Proposal","Pilot","Won","Lost"];
+const SEGMENTS=["Steel / iron","Cement","Aluminium / non-ferrous","Ferro alloys / pellets","Foundry / forging","Power","Other"];
+const PERSONAS=["EHS / Safety Head","L&D / Training Head","Plant / Unit Head","Digital / Industry 4.0","OEM product / service","Procurement","Founder / CEO","Other"];
+const KEY="axlevr-leads-v2";
+let leads=[], sortK="next", sortDir=1, stageFilter="";
+try{leads=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){}
+// Leads found via Sales Navigator are kept in leads-data.js (window.SEED_LEADS). On load, new ones are added and
+// contact/company fields of existing ones are refreshed; your stage, priority, follow-up and notes are kept.
+const DATA_FIELDS=["outreach","email","phone","companyPhone","companyEmail","website","address","size","url"];
+function seed(){const s=window.SEED_LEADS||[];const byId=new Map(leads.map(l=>[l.id,l]));
+  // One-time move from v1 storage: keep your edits for leads that are still in the list (matched by Sales Nav URL).
+  let v1=[];try{v1=JSON.parse(localStorage.getItem("axlevr-leads-v1")||"[]")}catch(e){}
+  const v1ByUrl=new Map(v1.map(l=>[l.url,l]));
+  s.forEach(l=>{const cur=byId.get(l.id);
+    if(cur){DATA_FIELDS.forEach(k=>{if(l[k]&&!cur[k])cur[k]=l[k]});return}
+    const old=v1ByUrl.get(l.url)||[...v1ByUrl.values()].find(o=>o.name===l.name&&o.company&&l.company.startsWith(o.company.split(" ")[0]));
+    const n={...l};if(old&&old.stage&&old.stage!=="New"){["stage","next","notes","priority"].forEach(k=>n[k]=old[k])}
+    leads.push(n)});
+  try{if(v1.length)localStorage.removeItem("axlevr-leads-v1")}catch(e){}
+  save();render()}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(leads))}catch(e){}}
+const $=s=>document.querySelector(s), esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const today=()=>new Date().toISOString().slice(0,10);
+const fill=(sel,arr)=>sel.innerHTML+=arr.map(x=>`<option>${esc(x)}</option>`).join("");
+fill($("#fSeg"),SEGMENTS);fill(form.segment,SEGMENTS);fill(form.persona,PERSONAS);fill(form.stage,STAGES);
+
+function contactCell(l){const o=[];
+  if(l.email)o.push(`<div>✉ <a href="mailto:${esc(l.email)}">${esc(l.email)}</a></div>`);
+  if(l.phone)o.push(`<div>☎ <a href="tel:${esc(l.phone)}">${esc(l.phone)}</a></div>`);
+  if(l.companyPhone||l.companyEmail)o.push(`<div class="sub">Company: ${[l.companyPhone&&`<a href="tel:${esc(l.companyPhone.split(/[,/;]/)[0])}">${esc(l.companyPhone)}</a>`,l.companyEmail&&`<a href="mailto:${esc(l.companyEmail.split(/[,;\s]/)[0])}">${esc(l.companyEmail)}</a>`].filter(Boolean).join(" · ")}</div>`);
+  if(l.contactSource&&(l.companyPhone||l.companyEmail))o.push(`<div class="sub"><a href="${esc(l.contactSource)}" target="_blank" rel="noopener">source</a></div>`);
+  if(l.website)o.push(`<div class="sub"><a href="${esc(/^https?:/.test(l.website)?l.website:"http://"+l.website)}" target="_blank" rel="noopener">${esc(l.website.replace(/^https?:\/\/(www\.)?/,"").replace(/\/$/,""))}</a></div>`);
+  return o.join("")||'<span class="sub">—</span>'}
+function render(){
+  const q=$("#q").value.toLowerCase(),seg=$("#fSeg").value,pri=$("#fPri").value,due=$("#fDue").checked,hasEmail=$("#fEmail").checked,t=today();
+  const counts=Object.fromEntries(STAGES.map(s=>[s,0]));leads.forEach(l=>counts[l.stage]=(counts[l.stage]||0)+1);
+  $("#stats").innerHTML=`<div class="stat ${stageFilter?"":"active"}" data-s=""><b>${leads.length}</b>All</div>`+
+    STAGES.map(s=>`<div class="stat ${stageFilter===s?"active":""}" data-s="${s}"><b>${counts[s]}</b>${s}</div>`).join("");
+  let list=leads.filter(l=>(!stageFilter||l.stage===stageFilter)&&(!seg||l.segment===seg)&&(!pri||l.priority===pri)
+    &&(!due||(l.next&&l.next<=t&&!["Won","Lost"].includes(l.stage)))&&(!hasEmail||l.email)
+    &&(!q||[l.name,l.title,l.company,l.notes,l.location,l.email].join(" ").toLowerCase().includes(q)));
+  list.sort((a,b)=>{let x=a[sortK]||"",y=b[sortK]||"";if(sortK==="stage"){x=STAGES.indexOf(x);y=STAGES.indexOf(y)}
+    if(sortK==="next"){x=x||"9999";y=y||"9999"}return (x>y?1:x<y?-1:0)*sortDir});
+  $("#rows").innerHTML=list.length?list.map(l=>`<tr>
+    <td><b>${l.url?`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`:esc(l.name)}</b><div class="sub">${esc(l.title)}</div><div class="sub">${esc(l.persona)}</div></td>
+    <td>${esc(l.company)}<div class="sub">${esc(l.size)}</div></td>
+    <td>${esc(l.segment)}</td><td>${esc(l.location)}</td>
+    <td class="contact">${contactCell(l)}</td>
+    <td><span class="pill ${esc(l.priority)}">${esc(l.priority)}</span></td>
+    <td><select data-id="${l.id}" class="stageSel">${STAGES.map(s=>`<option ${s===l.stage?"selected":""}>${s}</option>`).join("")}</select></td>
+    <td class="${l.next&&l.next<=t&&!["Won","Lost"].includes(l.stage)?"due":""}">${esc(l.next)}</td>
+    <td class="sub" style="max-width:280px">${esc(l.notes)}</td>
+    <td style="white-space:nowrap">${l.outreach?`<button class="msgs" data-msgs="${l.id}">Messages</button> `:""}<button data-edit="${l.id}">Edit</button> <button data-del="${l.id}" title="Delete">✕</button></td>
+  </tr>`).join(""):(leads.length?`<tr><td colspan="10" class="empty">No leads match.</td></tr>`:
+    `<tr><td colspan="10" class="empty"><b>No leads in this browser yet.</b><br>Click <b>Import leads</b> and choose your <code>leads-data.js</code> file (or a JSON backup / CSV).<br><span class="sub">Leads stay in this browser only. Nothing is uploaded.</span></td></tr>`);
+}
+document.addEventListener("click",e=>{
+  const s=e.target.closest(".stat");if(s){stageFilter=s.dataset.s;render()}
+  const th=e.target.closest("th[data-k]");if(th){sortDir=sortK===th.dataset.k?-sortDir:1;sortK=th.dataset.k;render()}
+  if(e.target.dataset.edit)openDlg(leads.find(l=>l.id===e.target.dataset.edit));
+  if(e.target.dataset.del){const l=leads.find(x=>x.id===e.target.dataset.del);if(confirm(`Delete ${l.name}?`)){leads=leads.filter(x=>x!==l);save();render()}}
+});
+document.addEventListener("change",e=>{if(e.target.classList.contains("stageSel")){const l=leads.find(x=>x.id===e.target.dataset.id);
+  l.stage=e.target.value;l.notes=`[${today()}] → ${l.stage}\n`+(l.notes||"");save();render()}});
+["#q","#fSeg","#fPri","#fDue","#fEmail"].forEach(s=>$(s).addEventListener("input",render));
+let editing=null;
+function openDlg(l){editing=l||null;form.reset();$("#dlgTitle").textContent=l?"Edit lead":"New lead";
+  if(l){for(const k in l)if(form[k])form[k].value=l[k]}else form.stage.value="New";dlg.showModal()}
+$("#addBtn").onclick=()=>openDlg();
+// ---- Outreach messages ----
+const NEXT_GAP={connect:3,email:3,inmail:5,msg1:7,followup:14};
+const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};
+let msgLead=null;
+function openMsgs(l){msgLead=l;$("#msgTitle").textContent=l.name;$("#msgSub").innerHTML=`${esc(l.title)} · ${esc(l.company)} · <a href="${esc(l.url)}" target="_blank" rel="noopener">Open in Sales Navigator</a>`;
+  $("#msgSteps").innerHTML=l.outreach.map((s,i)=>`<div class="step ${s.sent?"sent":""}">
+    <h4><span>${i+1}. ${esc(s.label)}${s.day?` <span class="sub">(day ${s.day})</span>`:""}</span>${s.sent?`<span class="sub">Sent ${esc(s.sent)}</span>`:""}</h4>
+    ${s.subject!==undefined?`<div class="row"><span class="sub">Subject</span><input data-i="${i}" data-f="subject" value="${esc(s.subject)}" style="flex:1"><button data-copy="${i}" data-f="subject">Copy</button></div>`:""}
+    <textarea data-i="${i}" data-f="text" rows="${Math.min(14,Math.max(4,Math.ceil(s.text.length/85)+s.text.split(String.fromCharCode(10)).length))}">${esc(s.text)}</textarea>
+    <div class="row"><button data-copy="${i}" data-f="text" class="primary">Copy</button>${s.key==="email"&&l.email?`<a href="mailto:${esc(l.email)}?subject=${encodeURIComponent(s.subject||"")}&body=${encodeURIComponent(s.text)}">Open in email app</a>`:""}
+      <span class="sub" data-count="${i}">${s.text.length} chars${s.key==="connect"?" / 300 max":""}</span><span style="flex:1"></span>
+      <button data-sent="${i}">${s.sent?"Sent again":"Mark sent"}</button></div></div>`).join("");
+  if(!msgDlg.open)msgDlg.showModal()}
+$("#msgSteps").addEventListener("input",e=>{const i=e.target.dataset.i;if(i===undefined)return;msgLead.outreach[i][e.target.dataset.f]=e.target.value;
+  if(e.target.dataset.f==="text"){const c=$(`[data-count="${i}"]`);const s=msgLead.outreach[i];c.textContent=`${s.text.length} chars${s.key==="connect"?" / 300 max":""}`;c.style.color=s.key==="connect"&&s.text.length>300?"var(--hot)":""}
+  save()});
+$("#msgSteps").addEventListener("click",async e=>{const b=e.target;
+  if(b.dataset.copy!==undefined){const v=msgLead.outreach[b.dataset.copy][b.dataset.f]||"";
+    try{await navigator.clipboard.writeText(v)}catch(_){const t=document.createElement("textarea");t.value=v;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove()}
+    const o=b.textContent;b.textContent="Copied ✓";setTimeout(()=>b.textContent=o,1200)}
+  if(b.dataset.sent!==undefined){const s=msgLead.outreach[b.dataset.sent],l=msgLead;s.sent=today();
+    if(STAGES.indexOf(s.stage)>STAGES.indexOf(l.stage))l.stage=s.stage;
+    l.next=addDays(NEXT_GAP[s.key]||7);l.notes=`[${today()}] Sent: ${s.label}`+String.fromCharCode(10)+(l.notes||"");save();render();openMsgs(l)}});
+document.addEventListener("click",e=>{if(e.target.dataset.msgs)openMsgs(leads.find(l=>l.id===e.target.dataset.msgs))});
+dlg.addEventListener("close",()=>{if(dlg.returnValue!=="save")return;
+  const d=Object.fromEntries(new FormData(form));
+  if(editing)Object.assign(editing,d);else leads.push({id:uid(),added:today(),...d});save();render()});
+const COLS=["name","title","company","segment","persona","location","email","phone","companyPhone","companyEmail","website","address","contactSource","size","priority","stage","next","url","notes","added"];
+function download(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
+$("#exportBtn").onclick=()=>download(`axlevr-leads-${today()}.csv`,[COLS.join(",")].concat(leads.map(l=>COLS.map(c=>`"${String(l[c]??"").replace(/"/g,'""')}"`).join(","))).join("\n"),"text/csv");
+$("#backupBtn").onclick=()=>download(`axlevr-leads-${today()}.json`,JSON.stringify(leads,null,1),"application/json");
+function parseCSV(t){const rows=[];let r=[],f="",q=false;for(let i=0;i<t.length;i++){const c=t[i];
+  if(q){if(c=='"'&&t[i+1]=='"'){f+='"';i++}else if(c=='"')q=false;else f+=c}
+  else if(c=='"')q=true;else if(c==","){r.push(f);f=""}else if(c=="\n"){r.push(f);rows.push(r);r=[];f=""}else if(c!="\r")f+=c}
+  if(f||r.length){r.push(f);rows.push(r)}return rows}
+// Accepts leads-data.js, a JSON backup, or a CSV export. Leads already here (same id, or same name + company) are
+// not duplicated: missing contact/outreach fields are filled in and your stage, follow-up and notes are kept.
+async function importFile(file){const t=await file.text();let add=[];
+  if(/\.(js|json)$/i.test(file.name))add=JSON.parse(t.slice(t.indexOf("["),t.lastIndexOf("]")+1));
+  else{const byLower=Object.fromEntries(COLS.map(c=>[c.toLowerCase(),c]));const [h,...rs]=parseCSV(t);
+    add=rs.filter(r=>r.some(Boolean)).map(r=>Object.fromEntries(h.map((k,i)=>[byLower[k.trim().toLowerCase()]||k.trim(),r[i]])))}
+  const byId=new Map(leads.map(l=>[l.id,l])),byKey=new Map(leads.map(l=>[(l.name+"|"+l.company).toLowerCase(),l]));let n=0,u=0;
+  add.forEach(l=>{if(!l.name)return;const cur=(l.id&&byId.get(l.id))||byKey.get((l.name+"|"+l.company).toLowerCase());
+    if(cur){let ch=false;DATA_FIELDS.forEach(k=>{if(l[k]&&!cur[k]){cur[k]=l[k];ch=true}});u+=ch;return}
+    leads.push({stage:"New",priority:"Warm",added:today(),...l,id:l.id||uid()});n++});
+  save();render();alert(`Imported ${n} new lead(s)`+(u?`, updated ${u}`:"")+".")}
+$("#importFile").onchange=async e=>{const f=e.target.files[0];if(f)try{await importFile(f)}catch(err){alert("Couldn't read that file: "+err.message)}e.target.value=""};
+render();seed();
+</script>
+</body>
+</html>

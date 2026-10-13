@@ -1,0 +1,4 @@
+# Lead data stays on your computer, never in this repo
+*.csv
+*.json
+leads-data.js
