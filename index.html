@@ -7,7 +7,8 @@
 <title>AxleVR Lead Tracker</title>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--muted:#667085;--line:#e4e7ec;--accent:#2f6fed;--hot:#d92d20;--warm:#dc6803;--cold:#667085;--won:#079455}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--muted:#98a2b3;--line:#2a2f3a;--accent:#6b9bff}}
+:root{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--muted:#98a2b3;--line:#2a2f3a;--accent:#6b9bff}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 header{padding:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--card)}
@@ -53,7 +54,9 @@ button.msgs{border-color:var(--accent);color:var(--accent)}
 <body>
 <header>
   <h1>AxleVR Lead Tracker</h1>
+  <script>try{if(localStorage.getItem("axlevr-theme")==="dark")document.documentElement.dataset.theme="dark"}catch(e){}</script>
   <div class="bar" style="margin:0">
+    <button id="themeBtn" title="Switch light / dark" onclick="const d=document.documentElement,dark=d.dataset.theme!=='dark';if(dark)d.dataset.theme='dark';else delete d.dataset.theme;this.textContent=dark?'☀ Light':'☾ Dark';try{localStorage.setItem('axlevr-theme',dark?'dark':'light')}catch(e){}">☾ Dark</button>
     <button class="primary" id="addBtn">+ Add lead</button>
     <button id="exportBtn">Export CSV</button>
     <button id="backupBtn">Backup JSON</button>
@@ -235,6 +238,7 @@ async function importFile(file){const t=await file.text();let add=[];
     leads.push({stage:"New",priority:"Warm",added:today(),...l,id:l.id||uid()});n++});
   save();render();alert(`Imported ${n} new lead(s)`+(u?`, updated ${u}`:"")+".")}
 $("#importFile").onchange=async e=>{const f=e.target.files[0];if(f)try{await importFile(f)}catch(err){alert("Couldn't read that file: "+err.message)}e.target.value=""};
+if(document.documentElement.dataset.theme==="dark")$("#themeBtn").textContent="☀ Light";
 render();seed();
 </script>
 </body>
