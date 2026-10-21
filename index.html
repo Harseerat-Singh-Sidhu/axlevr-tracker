@@ -166,7 +166,11 @@ function seed(){const s=window.SEED_LEADS||[];const byId=new Map(leads.map(l=>[l
         NEW_PRICE="A Starter Pilot on our ready-built LOTO module is ₹2.5 lakh + GST, and the fee is credited if you go on to a custom build.";
   s.forEach(l=>{const cur=byId.get(l.id);
     if(cur){DATA_FIELDS.forEach(k=>{if(l[k]&&!cur[k])cur[k]=l[k]});
-      (cur.outreach||[]).forEach(st=>{if(!st.sent&&st.text.includes(OLD_PRICE))st.text=st.text.replace(OLD_PRICE,NEW_PRICE)});return}
+      (cur.outreach||[]).forEach(st=>{if(!st.sent&&st.text.includes(OLD_PRICE))st.text=st.text.replace(OLD_PRICE,NEW_PRICE)});
+      // Outreach v3 (2026-10-22, strategy v3 format): replace steps that haven't been sent; keep any step already marked sent.
+      if(l.outreachVersion&&cur.outreachVersion!==l.outreachVersion){const sent=new Map((cur.outreach||[]).filter(s=>s.sent).map(s=>[s.key,s]));
+        cur.outreach=l.outreach.map(s=>sent.get(s.key)||{...s});cur.outreachVersion=l.outreachVersion}
+      return}
     const old=v1ByUrl.get(l.url)||[...v1ByUrl.values()].find(o=>o.name===l.name&&o.company&&l.company.startsWith(o.company.split(" ")[0]));
     const n={...l};if(old&&old.stage&&old.stage!=="New"){["stage","next","notes","priority"].forEach(k=>n[k]=old[k])}
     leads.push(n)});
