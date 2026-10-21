@@ -161,8 +161,12 @@ function seed(){const s=window.SEED_LEADS||[];const byId=new Map(leads.map(l=>[l
   // One-time move from v1 storage: keep your edits for leads that are still in the list (matched by Sales Nav URL).
   let v1=[];try{v1=JSON.parse(localStorage.getItem("axlevr-leads-v1")||"[]")}catch(e){}
   const v1ByUrl=new Map(v1.map(l=>[l.url,l]));
+  // Pricing changed 2026-10-21 (two tiers): refresh the old ₹1.5 lakh line in follow-ups that haven't been sent yet.
+  const OLD_PRICE="Pilots start at ₹1.5 lakh, and the fee is credited if you go ahead with the full module.",
+        NEW_PRICE="A Starter Pilot on our ready-built LOTO module is ₹2.5 lakh + GST, and the fee is credited if you go on to a custom build.";
   s.forEach(l=>{const cur=byId.get(l.id);
-    if(cur){DATA_FIELDS.forEach(k=>{if(l[k]&&!cur[k])cur[k]=l[k]});return}
+    if(cur){DATA_FIELDS.forEach(k=>{if(l[k]&&!cur[k])cur[k]=l[k]});
+      (cur.outreach||[]).forEach(st=>{if(!st.sent&&st.text.includes(OLD_PRICE))st.text=st.text.replace(OLD_PRICE,NEW_PRICE)});return}
     const old=v1ByUrl.get(l.url)||[...v1ByUrl.values()].find(o=>o.name===l.name&&o.company&&l.company.startsWith(o.company.split(" ")[0]));
     const n={...l};if(old&&old.stage&&old.stage!=="New"){["stage","next","notes","priority"].forEach(k=>n[k]=old[k])}
     leads.push(n)});
