@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
 <title>AxleVR Lead Tracker</title>
+<meta name="robots" content="noindex, nofollow">
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--muted:#667085;--line:#e4e7ec;--accent:#2f6fed;--hot:#d92d20;--warm:#dc6803;--cold:#667085;--won:#079455}
 :root{color-scheme:light}
@@ -49,6 +49,14 @@ td.contact div+div{margin-top:2px}
 .step.sent{opacity:.65}
 button.msgs{border-color:var(--accent);color:var(--accent)}
 .empty{padding:32px;text-align:center;color:var(--muted)}
+td.call{font-size:13px;min-width:130px}
+td.call .out{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;background:color-mix(in srgb,var(--muted) 15%,transparent)}
+td.call .out.good{background:color-mix(in srgb,var(--won) 18%,transparent);color:var(--won)}
+td.call .out.bad{background:color-mix(in srgb,var(--hot) 15%,transparent);color:var(--hot)}
+.dnc{color:var(--hot);font-weight:600}
+#callDlg{width:min(460px,calc(100vw - 32px))}
+#callDlg .opts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}
+#callDlg .opts button{text-align:left}
 </style>
 </head>
 <body>
@@ -71,12 +79,14 @@ button.msgs{border-color:var(--accent);color:var(--accent)}
     <select id="fPri"><option value="">All priorities</option><option>Hot</option><option>Warm</option><option>Cold</option></select>
     <label class="sub" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fDue"> Follow-up due</label>
     <label class="sub" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fEmail"> Has email</label>
+    <label class="sub" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fPhone"> Has phone</label>
+    <label class="sub" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fCallback"> Callback due</label>
   </div>
   <div class="tablewrap"><table style="min-width:1150px">
     <thead><tr>
       <th data-k="name">Name / Title</th><th data-k="company">Company</th><th data-k="segment">Segment</th>
       <th data-k="location">Plant / location</th><th>Contact</th><th data-k="priority">Priority</th><th data-k="stage">Stage</th>
-      <th data-k="next">Next follow-up</th><th>Notes</th><th></th>
+      <th data-k="next">Next follow-up</th><th data-k="lastCall">Last call</th><th>Notes</th><th></th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table></div>
@@ -96,6 +106,9 @@ button.msgs{border-color:var(--accent);color:var(--accent)}
     <label>Priority<select name="priority"><option>Hot</option><option selected>Warm</option><option>Cold</option></select></label>
     <label>Stage<select name="stage"></select></label>
     <label>Next follow-up<input type="date" name="next"></label>
+    <label>Last call<input type="date" name="lastCall"></label>
+    <label>Call outcome<select name="callOutcome"><option value=""></option></select></label>
+    <label>Callback date<input type="date" name="callbackDate"></label>
     <label class="full">LinkedIn / Sales Nav URL<input name="url" type="url"></label>
     <label>Email<input name="email" type="email"></label>
     <label>Phone<input name="phone"></label>
@@ -111,6 +124,16 @@ button.msgs{border-color:var(--accent);color:var(--accent)}
   </div>
 </form></dialog>
 
+<dialog id="callDlg">
+  <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+    <div><h3 style="margin:0" id="callTitle"></h3><div class="sub" id="callSub"></div></div>
+    <button onclick="callDlg.close()">Close</button>
+  </div>
+  <p class="sub" style="margin-bottom:0">How did the call go? This sets today's date, the outcome, a callback date and a note.</p>
+  <div class="opts" id="callOpts"></div>
+  <label class="sub" style="display:flex;flex-direction:column;gap:4px">Note (optional)<textarea id="callNote" rows="2" placeholder="e.g. gatekeeper gave name of HSE head: …"></textarea></label>
+</dialog>
+
 <dialog id="msgDlg">
   <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
     <div><h3 style="margin:0" id="msgTitle"></h3><div class="sub" id="msgSub"></div></div>
@@ -124,6 +147,10 @@ button.msgs{border-color:var(--accent);color:var(--accent)}
 const STAGES=["New","Connect sent","Connected","Messaged","Replied","Discovery call","Demo","Proposal","Pilot","Won","Lost"];
 const SEGMENTS=["Steel / iron","Cement","Aluminium / non-ferrous","Ferro alloys / pellets","Foundry / forging","Power","Other"];
 const PERSONAS=["EHS / Safety Head","L&D / Training Head","Plant / Unit Head","Digital / Industry 4.0","OEM product / service","Procurement","Founder / CEO","Other"];
+// Call outcomes: [label, days until callback (0 = none), stage to move to (or null), css class]
+const CALL_OUTCOMES={
+  "No answer":[2,null,""],"Gatekeeper":[2,null,""],"Spoke":[7,"Replied","good"],"Demo booked":[0,"Demo","good"],
+  "Not interested":[0,"Lost","bad"],"Do not call":[0,null,"bad"]};
 const KEY="axlevr-leads-v2";
 let leads=[], sortK="next", sortDir=1, stageFilter="";
 try{leads=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){}
@@ -146,25 +173,28 @@ const $=s=>document.querySelector(s), esc=s=>String(s??"").replace(/[&<>"]/g,c=>
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const today=()=>new Date().toISOString().slice(0,10);
 const fill=(sel,arr)=>sel.innerHTML+=arr.map(x=>`<option>${esc(x)}</option>`).join("");
-fill($("#fSeg"),SEGMENTS);fill(form.segment,SEGMENTS);fill(form.persona,PERSONAS);fill(form.stage,STAGES);
+fill($("#fSeg"),SEGMENTS);fill(form.segment,SEGMENTS);fill(form.persona,PERSONAS);fill(form.stage,STAGES);fill(form.callOutcome,Object.keys(CALL_OUTCOMES));
+function callCell(l){if(!l.lastCall&&!l.callOutcome)return '<span class="sub">—</span>';const o=CALL_OUTCOMES[l.callOutcome]||[];
+  return `${esc(l.lastCall)}${l.callOutcome?` <span class="out ${o[2]||""}">${esc(l.callOutcome)}</span>`:""}${l.callbackDate&&l.callOutcome!=="Do not call"?`<div class="sub ${l.callbackDate<=today()?"due":""}">↩ ${esc(l.callbackDate)}</div>`:""}`}
 
 function contactCell(l){const o=[];
   if(l.email)o.push(`<div>✉ <a href="mailto:${esc(l.email)}">${esc(l.email)}</a></div>`);
-  if(l.phone)o.push(`<div>☎ <a href="tel:${esc(l.phone)}">${esc(l.phone)}</a></div>`);
+  if(l.phone)o.push(l.callOutcome==="Do not call"?`<div class="dnc">☎ ${esc(l.phone)} · DO NOT CALL</div>`:`<div>☎ <a href="tel:${esc(l.phone)}">${esc(l.phone)}</a></div>`);
   if(l.companyPhone||l.companyEmail)o.push(`<div class="sub">Company: ${[l.companyPhone&&`<a href="tel:${esc(l.companyPhone.split(/[,/;]/)[0])}">${esc(l.companyPhone)}</a>`,l.companyEmail&&`<a href="mailto:${esc(l.companyEmail.split(/[,;\s]/)[0])}">${esc(l.companyEmail)}</a>`].filter(Boolean).join(" · ")}</div>`);
   if(l.contactSource&&(l.companyPhone||l.companyEmail))o.push(`<div class="sub"><a href="${esc(l.contactSource)}" target="_blank" rel="noopener">source</a></div>`);
   if(l.website)o.push(`<div class="sub"><a href="${esc(/^https?:/.test(l.website)?l.website:"http://"+l.website)}" target="_blank" rel="noopener">${esc(l.website.replace(/^https?:\/\/(www\.)?/,"").replace(/\/$/,""))}</a></div>`);
   return o.join("")||'<span class="sub">—</span>'}
 function render(){
-  const q=$("#q").value.toLowerCase(),seg=$("#fSeg").value,pri=$("#fPri").value,due=$("#fDue").checked,hasEmail=$("#fEmail").checked,t=today();
+  const q=$("#q").value.toLowerCase(),seg=$("#fSeg").value,pri=$("#fPri").value,due=$("#fDue").checked,hasEmail=$("#fEmail").checked,hasPhone=$("#fPhone").checked,cb=$("#fCallback").checked,t=today();
   const counts=Object.fromEntries(STAGES.map(s=>[s,0]));leads.forEach(l=>counts[l.stage]=(counts[l.stage]||0)+1);
   $("#stats").innerHTML=`<div class="stat ${stageFilter?"":"active"}" data-s=""><b>${leads.length}</b>All</div>`+
     STAGES.map(s=>`<div class="stat ${stageFilter===s?"active":""}" data-s="${s}"><b>${counts[s]}</b>${s}</div>`).join("");
   let list=leads.filter(l=>(!stageFilter||l.stage===stageFilter)&&(!seg||l.segment===seg)&&(!pri||l.priority===pri)
     &&(!due||(l.next&&l.next<=t&&!["Won","Lost"].includes(l.stage)))&&(!hasEmail||l.email)
+    &&(!hasPhone||l.phone||l.companyPhone)&&(!cb||(l.callbackDate&&l.callbackDate<=t&&l.callOutcome!=="Do not call"&&!["Won","Lost"].includes(l.stage)))
     &&(!q||[l.name,l.title,l.company,l.notes,l.location,l.email].join(" ").toLowerCase().includes(q)));
   list.sort((a,b)=>{let x=a[sortK]||"",y=b[sortK]||"";if(sortK==="stage"){x=STAGES.indexOf(x);y=STAGES.indexOf(y)}
-    if(sortK==="next"){x=x||"9999";y=y||"9999"}return (x>y?1:x<y?-1:0)*sortDir});
+    if(sortK==="next"){x=x||"9999";y=y||"9999"}if(sortK==="lastCall"){x=x||"0000";y=y||"0000"}return (x>y?1:x<y?-1:0)*sortDir});
   $("#rows").innerHTML=list.length?list.map(l=>`<tr>
     <td><b>${l.url?`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`:esc(l.name)}</b><div class="sub">${esc(l.title)}</div><div class="sub">${esc(l.persona)}</div></td>
     <td>${esc(l.company)}<div class="sub">${esc(l.size)}</div></td>
@@ -173,10 +203,11 @@ function render(){
     <td><span class="pill ${esc(l.priority)}">${esc(l.priority)}</span></td>
     <td><select data-id="${l.id}" class="stageSel">${STAGES.map(s=>`<option ${s===l.stage?"selected":""}>${s}</option>`).join("")}</select></td>
     <td class="${l.next&&l.next<=t&&!["Won","Lost"].includes(l.stage)?"due":""}">${esc(l.next)}</td>
+    <td class="call">${callCell(l)}</td>
     <td class="sub" style="max-width:280px">${esc(l.notes)}</td>
-    <td style="white-space:nowrap">${l.outreach?`<button class="msgs" data-msgs="${l.id}">Messages</button> `:""}<button data-edit="${l.id}">Edit</button> <button data-del="${l.id}" title="Delete">✕</button></td>
-  </tr>`).join(""):(leads.length?`<tr><td colspan="10" class="empty">No leads match.</td></tr>`:
-    `<tr><td colspan="10" class="empty"><b>No leads in this browser yet.</b><br>Click <b>Import leads</b> and choose your <code>leads-data.js</code> file (or a JSON backup / CSV).<br><span class="sub">Leads stay in this browser only. Nothing is uploaded.</span></td></tr>`);
+    <td style="white-space:nowrap">${l.outreach?`<button class="msgs" data-msgs="${l.id}">Messages</button> `:""}${l.callOutcome==="Do not call"?"":`<button data-call="${l.id}">Log call</button> `}<button data-edit="${l.id}">Edit</button> <button data-del="${l.id}" title="Delete">✕</button></td>
+  </tr>`).join(""):(leads.length?`<tr><td colspan="11" class="empty">No leads match.</td></tr>`:
+    `<tr><td colspan="11" class="empty"><b>No leads in this browser yet.</b><br>Click <b>Import leads</b> and choose your <code>leads-data.js</code> file (or a JSON backup / CSV).<br><span class="sub">Leads stay in this browser only. Nothing is uploaded.</span></td></tr>`);
 }
 document.addEventListener("click",e=>{
   const s=e.target.closest(".stat");if(s){stageFilter=s.dataset.s;render()}
@@ -186,7 +217,19 @@ document.addEventListener("click",e=>{
 });
 document.addEventListener("change",e=>{if(e.target.classList.contains("stageSel")){const l=leads.find(x=>x.id===e.target.dataset.id);
   l.stage=e.target.value;l.notes=`[${today()}] → ${l.stage}\n`+(l.notes||"");save();render()}});
-["#q","#fSeg","#fPri","#fDue","#fEmail"].forEach(s=>$(s).addEventListener("input",render));
+["#q","#fSeg","#fPri","#fDue","#fEmail","#fPhone","#fCallback"].forEach(s=>$(s).addEventListener("input",render));
+// ---- Call logging ----
+let callLead=null;
+function openCall(l){callLead=l;$("#callTitle").textContent=l.name;
+  $("#callSub").textContent=[l.title,l.company,l.phone||l.companyPhone||"no number on file"].filter(Boolean).join(" · ");
+  $("#callNote").value="";$("#callOpts").innerHTML=Object.entries(CALL_OUTCOMES).map(([k,[d]])=>`<button data-outcome="${esc(k)}">${esc(k)}${d?`<div class="sub">callback in ${d} day${d>1?"s":""}</div>`:""}</button>`).join("");
+  callDlg.showModal()}
+$("#callOpts").addEventListener("click",e=>{const b=e.target.closest("[data-outcome]");if(!b)return;const k=b.dataset.outcome,[d,stage]=CALL_OUTCOMES[k],l=callLead,note=$("#callNote").value.trim();
+  l.lastCall=today();l.callOutcome=k;l.callbackDate=d?addDays(d):"";l.dials=(l.dials||0)+1;
+  if(stage&&STAGES.indexOf(stage)>STAGES.indexOf(l.stage))l.stage=stage;
+  if(d&&(!l.next||l.next<today()||l.callbackDate<l.next))l.next=l.callbackDate;
+  l.notes=`[${today()}] Call: ${k}${note?" — "+note:""}`+String.fromCharCode(10)+(l.notes||"");save();render();callDlg.close()});
+document.addEventListener("click",e=>{if(e.target.dataset.call)openCall(leads.find(l=>l.id===e.target.dataset.call))});
 let editing=null;
 function openDlg(l){editing=l||null;form.reset();$("#dlgTitle").textContent=l?"Edit lead":"New lead";
   if(l){for(const k in l)if(form[k])form[k].value=l[k]}else form.stage.value="New";dlg.showModal()}
@@ -218,7 +261,7 @@ document.addEventListener("click",e=>{if(e.target.dataset.msgs)openMsgs(leads.fi
 dlg.addEventListener("close",()=>{if(dlg.returnValue!=="save")return;
   const d=Object.fromEntries(new FormData(form));
   if(editing)Object.assign(editing,d);else leads.push({id:uid(),added:today(),...d});save();render()});
-const COLS=["name","title","company","segment","persona","location","email","phone","companyPhone","companyEmail","website","address","contactSource","size","priority","stage","next","url","notes","added"];
+const COLS=["name","title","company","segment","persona","location","email","phone","companyPhone","companyEmail","website","address","contactSource","size","priority","stage","next","lastCall","callOutcome","callbackDate","dials","url","notes","added"];
 function download(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
 $("#exportBtn").onclick=()=>download(`axlevr-leads-${today()}.csv`,[COLS.join(",")].concat(leads.map(l=>COLS.map(c=>`"${String(l[c]??"").replace(/"/g,'""')}"`).join(","))).join("\n"),"text/csv");
 $("#backupBtn").onclick=()=>download(`axlevr-leads-${today()}.json`,JSON.stringify(leads,null,1),"application/json");
